@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日T交易决策系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+        .container { max-width: 800px; margin: 0 auto; padding: 15px; }
+        
+        .header { background: linear-gradient(135deg, #16213e, #0f3460); padding: 20px; border-radius: 12px; margin-bottom: 15px; text-align: center; }
+        .header h1 { font-size: 1.5em; color: #e94560; margin-bottom: 5px; }
+        .header .time-block { font-size: 1.2em; color: #0ff; }
+        
+        .fund-bar { background: #0f3460; padding: 15px; border-radius: 10px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .fund-bar label { font-weight: bold; white-space: nowrap; }
+        .fund-bar input { flex: 1; min-width: 150px; padding: 10px; border-radius: 6px; border: none; background: #16213e; color: #fff; font-size: 1.1em; }
+        .fund-bar button { padding: 10px 20px; background: #e94560; border: none; border-radius: 6px; color: #fff; cursor: pointer; font-weight: bold; }
+        
+        .card { background: #16213e; border-radius: 12px; padding: 20px; margin-bottom: 15px; border-left: 4px solid #e94560; }
+        .card.morning { border-left-color: #ffc107; }
+        .card.noon { border-left-color: #00bcd4; }
+        .card.review { border-left-color: #4caf50; }
+        .card h2 { font-size: 1.2em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .card h2 .badge { font-size: 0.7em; padding: 3px 8px; border-radius: 12px; background: #e94560; }
+        
+        .signal-box { background: #0f3460; padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .signal-box .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1a1a2e; flex-wrap: wrap; }
+        .signal-box .label { color: #888; }
+        .signal-box .value { font-weight: bold; color: #0ff; }
+        .signal-box .value.buy { color: #f44336; }
+        .signal-box .value.sell { color: #4caf50; }
+        
+        textarea { width: 100%; height: 80px; background: #0f3460; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px; margin-top: 10px; resize: vertical; font-family: inherit; }
+        
+        button.action-btn { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px 5px 5px 0; }
+        button.primary { background: #e94560; color: #fff; }
+        button.secondary { background: #0f3460; color: #0ff; border: 1px solid #0ff; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; }
+        th { background: #0f3460; padding: 10px; text-align: left; }
+        td { padding: 8px 10px; border-bottom: 1px solid #1a1a2e; }
+        td input { width: 100%; background: #0f3460; border: 1px solid #333; color: #fff; padding: 5px; border-radius: 4px; }
+        td select { background: #0f3460; color: #fff; border: 1px solid #333; padding: 5px; border-radius: 4px; width: 100%; }
+        
+        .timer { color: #e94560; font-weight: bold; }
+        .summary-box { background: #0f3460; padding: 15px; border-radius: 8px; margin-top: 10px; }
+        .profit-positive { color: #f44336; }
+        .profit-negative { color: #4caf50; }
+        
+        @media (max-width: 500px) {
+            .signal-box .row { flex-direction: column; }
+            .header h1 { font-size: 1.2em; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    
+    <div class="header">
+        <h1>📊 日T交易决策系统</h1>
+        <div class="time-block" id="currentTime">--</div>
+        <small>可转债 / T+0 ETF · 日内交易 · 不过夜</small>
+    </div>
+
+    <div class="fund-bar">
+        <label>💰 今日可用资金：</label>
+        <input type="number" id="fundInput" placeholder="请输入资金（元）" value="100000">
+        <button onclick="saveFund()">确认设置</button>
+        <span id="fundDisplay" style="color:#0ff;margin-left:10px;"></span>
+    </div>
+
+    <div class="card morning" id="morningCard">
+        <h2>🌅 早盘推荐 <span class="badge">9:25-9:30</span></h2>
+        <div id="morningContent">
+            <p style="color:#888;">等待早盘竞价数据...</p>
+        </div>
+        <button class="action-btn primary" onclick="generateMorning()">🔄 生成早盘推荐</button>
+        <button class="action-btn secondary" onclick="fillDemoData('morning')">📥 填入演示数据</button>
+    </div>
+
+    <div class="card noon" id="noonCard">
+        <h2>☀️ 午盘推荐 <span class="badge">12:55</span></h2>
+        <div id="noonContent">
+            <p style="color:#888;">等待午盘扫描...</p>
+        </div>
+        <button class="action-btn primary" onclick="generateNoon()">🔄 生成午盘推荐</button>
+        <button class="action-btn secondary" onclick="fillDemoData('noon')">📥 填入演示数据</button>
+    </div>
+
+    <div class="card review" id="reviewCard">
+        <h2>📝 收盘复盘 <span class="badge">15:00后</span></h2>
+        <div id="reviewContent">
+            <p style="color:#888;">收盘后生成复盘报告...</p>
+        </div>
+        <button class="action-btn primary" onclick="generateReview()">📋 生成复盘</button>
+    </div>
+
+    <div class="card">
+        <h2>📒 今日交易记录</h2>
+        <table id="tradeTable">
+            <thead>
+                <tr>
+                    <th>时间</th><th>标的</th><th>方向</th><th>价格</th><th>数量</th><th>金额</th><th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="tradeBody"></tbody>
+        </table>
+        <button class="action-btn primary" onclick="addTradeRow()">➕ 新增记录</button>
+        <button class="action-btn secondary" onclick="calcAll()">🧮 计算盈亏</button>
+        <div class="summary-box" id="summaryResult"></div>
+    </div>
+
+</div>
+
+<script>
+// ============ 时间显示 ============
+function updateTime() {
+    const now = new Date();
+    document.getElementById('currentTime').textContent = now.toLocaleString('zh-CN', {weekday:'long', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const h = now.getHours(), m = now.getMinutes();
+    document.getElementById('morningCard').style.boxShadow = (h===9 && m>=25 && m<=30) ? '0 0 20px #ffc107' : '';
+    document.getElementById('noonCard').style.boxShadow = (h===12 && m>=55) ? '0 0 20px #00bcd4' : '';
+    document.getElementById('reviewCard').style.boxShadow = (h>=15) ? '0 0 20px #4caf50' : '';
+}
+setInterval(updateTime, 1000);
+updateTime();
+
+// ============ 资金管理 ============
+function saveFund() {
+    const fund = document.getElementById('fundInput').value;
+    document.getElementById('fundDisplay').textContent = '✅ 当前资金：¥' + Number(fund).toLocaleString();
+    localStorage.setItem('dayFund', fund);
+}
+document.getElementById('fundInput').value = localStorage.getItem('dayFund') || 100000;
+saveFund();
+
+// ============ 演示数据 ============
+function fillDemoData(type) {
+    if (type === 'morning') {
+        document.getElementById('morningContent').innerHTML = `
+            <div class="signal-box">
+                <div class="row"><span class="label">📌 推荐标的</span><span class="value">纳指ETF (513100)</span></div>
+                <div class="row"><span class="label">⏰ 买入时间</span><span class="value timer">9:30-9:35</span></div>
+                <div class="row"><span class="label">💰 买入价格</span><span class="value buy">1.852 附近</span></div>
+                <div class="row"><span class="label">📊 仓位建议</span><span class="value">30% (约3万元)</span></div>
+                <div class="row"><span class="label">🎯 止盈价</span><span class="value sell">1.878 (+1.4%)</span></div>
+                <div class="row"><span class="label">🛑 止损价</span><span class="value sell">1.838 (-0.75%)</span></div>
+            </div>
+            <p style="margin-top:10px;">📋 <b>详细操作：</b></p>
+            <textarea>【9:30】观察开盘价是否高于1.845，若符合则：
+1. 以1.852限价买入1600份，约29632元
+2. 设置止损单1.838，止盈单1.878
+3. 若9:35前未成交，撤单等待午盘机会
+【盘中】若跌破1.840且无反弹，手动止损离场
+【午盘】若仍持仓且价格在1.855以上，可加仓10%</textarea>
+        `;
+    } else if (type === 'noon') {
+        document.getElementById('noonContent').innerHTML = `
+            <div class="signal-box">
+                <div class="row"><span class="label">📌 新推荐</span><span class="value">中概互联ETF (513050)</span></div>
+                <div class="row"><span class="label">⏰ 买入时间</span><span class="value timer">13:00-13:05</span></div>
+                <div class="row"><span class="label">💰 买入价格</span><span class="value buy">0.912 附近</span></div>
+                <div class="row"><span class="label">📊 仓位</span><span class="value">20% (约2万元)</span></div>
+                <div class="row"><span class="label">🎯 止盈</span><span class="value sell">0.925 (+1.4%)</span></div>
+                <div class="row"><span class="label">🛑 止损</span><span class="value sell">0.905 (-0.77%)</span></div>
+            </div>
+            <p style="margin-top:10px;">⚠️ 上午持仓纳指ETF若未止盈，13:00前务必平仓，不过夜！</p>
+            <textarea>【12:55】上午纳指ETF已触发止盈1.878，盈利1.4%，收益约415元。
+午盘新开中概互联ETF：
+1. 13:00以0.912买入2200份，约20064元
+2. 尾盘14:50前无论盈亏必须清仓</textarea>
+        `;
+    }
+}
+
+// ============ 生成推荐 ============
+function generateMorning() {
+    const fund = document.getElementById('fundInput').value || 100000;
+    const candidates = [
+        {name:'纳指ETF(513100)', price:1.852, stopLoss:1.838, stopProfit:1.878, ratio:0.3},
+        {name:'可转债-银轮转债', price:145.2, stopLoss:143.5, stopProfit:148.0, ratio:0.25},
+        {name:'恒生ETF(159920)', price:1.235, stopLoss:1.225, stopProfit:1.252, ratio:0.3},
+    ];
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    const amount = (fund * pick.ratio).toFixed(0);
+    document.getElementById('morningContent').innerHTML = `
+        <div class="signal-box">
+            <div class="row"><span class="label">📌 推荐标的</span><span class="value">${pick.name}</span></div>
+            <div class="row"><span class="label">⏰ 买入时间</span><span class="value timer">9:30-9:35</span></div>
+            <div class="row"><span class="label">💰 买入价格</span><span class="value buy">${pick.price} 附近</span></div>
+            <div class="row"><span class="label">📊 仓位建议</span><span class="value">${pick.ratio*100}% (约${Number(amount).toLocaleString()}元)</span></div>
+            <div class="row"><span class="label">🎯 止盈价</span><span class="value sell">${pick.stopProfit} (+${((pick.stopProfit/pick.price-1)*100).toFixed(1)}%)</span></div>
+            <div class="row"><span class="label">🛑 止损价</span><span class="value sell">${pick.stopLoss} (${((pick.stopLoss/pick.price-1)*100).toFixed(1)}%)</span></div>
+        </div>
+        <textarea>【9:30-9:35】限价${pick.price}买入，仓位${pick.ratio*100}%，约${amount}元
+止盈：${pick.stopProfit}，止损：${pick.stopLoss}
+盘中不加仓，14:50前未触发止盈止损则市价清仓。</textarea>
+    `;
+}
+
+function generateNoon() {
+    const candidates = ['中概互联ETF(513050)','科创50ETF(588000)','可转债-润达转债'];
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    document.getElementById('noonContent').innerHTML = `
+        <div class="signal-box">
+            <div class="row"><span class="label">📌 午盘推荐</span><span class="value">${pick}</span></div>
+            <div class="row"><span class="label">⏰ 买入时间</span><span class="value timer">13:00-13:05</span></div>
+            <div class="row"><span class="label">⚠️ 提醒</span><span class="value">上午持仓务必14:50前清仓</span></div>
+        </div>
+        <textarea>午盘新开仓建议：${pick}，仓位20%，尾盘14:50前必须清仓，不过夜。</textarea>
+    `;
+}
+
+function generateReview() {
+    document.getElementById('reviewContent').innerHTML = `
+        <div class="summary-box">
+            <p>📅 <b>复盘日期：</b>${new Date().toLocaleDateString()}</p>
+            <p>📊 <b>今日操作总结：</b>请在交易记录中填写实际成交后自动计算</p>
+            <p>💡 <b>明日预判：</b>关注隔夜美股走势，纳指ETF若高开则观望，低开0.5%以上可轻仓博反弹。</p>
+            <p style="color:#888;">⚠️ 复盘内容需结合你的实际交易记录，请确保已填写所有成交。</p>
+        </div>
+    `;
+}
+
+// ============ 交易记录 ============
+function addTradeRow() {
+    const tbody = document.getElementById('tradeBody');
+    const row = tbody.insertRow();
+    row.innerHTML = `
+        <td><input placeholder="如 09:35"></td>
+        <td><input placeholder="标的代码"></td>
+        <td><select><option>买入</option><option>卖出</option></select></td>
+        <td><input type="number" step="0.001" placeholder="价格" oninput="calcRow(this)"></td>
+        <td><input type="number" placeholder="数量" oninput="calcRow(this)"></td>
+        <td><input type="number" placeholder="金额" readonly></td>
+        <td><button onclick="this.closest('tr').remove()" style="background:#e94560;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">删除</button></td>
+    `;
+}
+
+function calcRow(input) {
+    const row = input.closest('tr');
+    const price = parseFloat(row.cells[3].querySelector('input').value) || 0;
+    const qty = parseFloat(row.cells[4].querySelector('input').value) || 0;
+    row.cells[5].querySelector('input').value = (price * qty).toFixed(2);
+}
+
+function calcAll() {
+    let totalBuy = 0, totalSell = 0, totalPnl = 0;
+    const rows = document.querySelectorAll('#tradeBody tr');
+    rows.forEach(row => {
+        const dir = row.cells[2].querySelector('select').value;
+        const amt = parseFloat(row.cells[5].querySelector('input').value) || 0;
+        if (dir === '买入') totalBuy += amt;
+        else { totalSell += amt; totalPnl += amt; }
+    });
+    totalPnl = totalSell - totalBuy;
+    const cls = totalPnl >= 0 ? 'profit-positive' : 'profit-negative';
+    document.getElementById('summaryResult').innerHTML = `
+        <p>📥 总买入：<b>¥${totalBuy.toLocaleString()}</b></p>
+        <p>📤 总卖出：<b>¥${totalSell.toLocaleString()}</b></p>
+        <p>📈 净盈亏：<b class="${cls}">¥${totalPnl.toLocaleString()} (${totalBuy>0 ? ((totalPnl/totalBuy)*100).toFixed(2) : 0}%)</b></p>
+    `;
+}
+
+// 初始空行
+for(let i=0; i<2; i++) addTradeRow();
+</script>
+</body>
+</html>
